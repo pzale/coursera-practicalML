@@ -1,0 +1,109 @@
+---
+title: "Coursera Machine Learning Prediction Assignment"
+author: "Peter Zale"
+date: "May 21, 2016"
+output: html_document
+---
+##Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, your goal will be to predict the manner in which they performed the exercise using the data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset)
+
+##Data Sets
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+##Processing the Data
+We will first load required R packages and then load the data sets from the URLs that were provided.
+
+```{r,message=FALSE}
+#Load necessary packages
+library(caret) 
+library(rpart)
+library(rattle)
+library(rpart.plot)
+library(repmis)
+library(randomForest)
+```
+```{r,echo=TRUE}
+# import the data from the URLs
+#trainurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+#testurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+#training <- source_data(trainurl, na.strings = c("NA", "#DIV/0!", ""), header = TRUE)
+#testing <- source_data(testurl, na.strings = c("NA", "#DIV/0!", ""), header = TRUE)
+# load data locally
+trainingData <- read.csv("pml-training.csv", na.strings = c("NA", ""))
+testingData <- read.csv("pml-testing.csv", na.strings = c("NA", ""))
+```
+
+###Data Cleaning
+Now we will remove columns that contain NAs in the testing dataset. We will also remove the first 7 features since they are not needed for our prediction.
+
+```{r, echo=TRUE}
+features <- names(testingData[,colSums(is.na(testingData)) == 0])[8:59]
+
+# Only use features used in testing cases.
+training <- trainingData[,c(features,"classe")]
+testing <- testingData[,c(features,"problem_id")]
+
+dim(training); dim(testing);
+```
+
+As you can see from the dimensions of the data sets, the cleaned data sets training and testing both have 53 columns. training has 19622 rows while testing has 20 rows.
+
+###Subsetting the Data
+Next, we'll subset the data into the final testing and training sets that we'll use for the analysis. We'll split the training set (70% of the cases) for prediction and the testing set (30% of the cases) to compute the out-of-sample errors.
+
+```{r,echo=TRUE}
+set.seed(12345)
+
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+training <- training[inTrain,]
+testing <- training[-inTrain,]
+```
+
+###Decision Tree
+
+```{r,echo=TRUE}
+control <- trainControl(method = "cv", number = 5)
+modFitDT <- train(classe ~ ., data = training, method = "rpart", 
+                   trControl = control)
+print(modFitDT, digits = 4)
+```
+```{r,echo=TRUE}
+fancyRpartPlot(modFitDT$finalModel)
+```
+```{r,echo=TRUE}
+#prediction using testing set
+predictDT <- predict(modFitDT, testing)
+confusionMatrix(predictDT, testing$classe)
+```
+As shown in the confusion matrix, the accuracy rate is 0.5, and so the out-of-sample error rate is 0.5. That is very low so our decision tree model will not be good enough to use as a predictor. We will need to explore another option.
+
+###Random Forest Method
+Random forests are known to produce a small out of sample error. The error will be estimated using the 30% testing sample. The accuracy of this model should be significaently higher.
+```{r,echo=TRUE}
+set.seed(12345)
+modFitRF <- randomForest(classe ~ ., data = training, ntree = 1000)
+```
+```{r,echo=TRUE}
+#prediction using testing set
+predictRF <- predict(modFitRF, testing, type = "class")
+confusionMatrix(predictRF, testing$classe)
+```
+As shown, the random forest method was was better than the decision tree. The random forest method yielded 100% accuracy.
+
+###Prediction on the Testing Set
+Since the random forest method yielded 100% accuracy we will be using it.
+
+```{r,echo=TRUE}
+predictionRF <- predict(modFitRF, testingData)
+predictionRF
+```
+
